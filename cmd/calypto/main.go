@@ -4,8 +4,10 @@ import (
 	"calypto/cfg"
 	"calypto/pkg/cache"
 	"calypto/pkg/db"
+	"calypto/pkg/idgen"
 	"calypto/pkg/logger"
 	"calypto/pkg/oauth2"
+	"calypto/service/wallet"
 	"context"
 	"database/sql"
 	"fmt"
@@ -81,9 +83,9 @@ func main() {
 	)
 
 	// ============
-	// Init DB client
+	// Init DB dbClient
 	// ============
-	client, err := db.NewSQLClient("postgres", pgDSN)
+	dbClient, err := db.NewSQLClient("postgres", pgDSN)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,7 +93,7 @@ func main() {
 	// ============
 	// Example transaction
 	// ============
-	err = client.WithTransaction(context.Background(), sql.LevelSerializable,
+	err = dbClient.WithTransaction(context.Background(), sql.LevelSerializable,
 		func(ctx context.Context, tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, "INSERT INTO users(id, name) VALUES($1, $2)", 1, "Alice")
 			if err != nil {
@@ -131,6 +133,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// =============
+	// ID Generator
+	// =============
+	snowFlakeIdGen, err := idgen.NewSnowflakeGenerator(int64(config.NodeId))
+	if err != nil {
+		log.Fatalf("Failed to initialize ID Generator: %v", err)
+	}
+
 	// ============
 	// HTTP
 	// ============
@@ -154,6 +164,8 @@ func main() {
 </html>`
 		c.String(200, html)
 	})
+
+	wallet.NewHandler(r, snowFlakeIdGen, dbClient)
 
 	auth := r.Group("/auth")
 	{

@@ -2,8 +2,10 @@ package cfg
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -44,6 +46,7 @@ type PostgresConfig struct {
 
 type Config struct {
 	AppEnv        string
+	NodeId        int
 	Redis         RedisConfig
 	Postgres      PostgresConfig
 	OAuth2        Oauth2Config
@@ -62,6 +65,12 @@ func Load() (*Config, error) {
 	host := mustEnv("REDIS_HOST", &errs)
 	port := mustEnv("REDIS_PORT", &errs)
 	password := getEnvOrDefault("REDIS_PASSWORD", "")
+
+	nodeIdStr := mustEnv("NODE_ID", &errs)
+	nodeId, err := strconv.Atoi(nodeIdStr)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("NODE_ID must be an integer: %w", err))
+	}
 
 	// ==========
 	// OAuth2
@@ -107,6 +116,7 @@ func Load() (*Config, error) {
 
 	return &Config{
 		AppEnv: appEnv,
+		NodeId: nodeId,
 		Redis: RedisConfig{
 			Host:     host,
 			Port:     port,
