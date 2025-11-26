@@ -1,18 +1,23 @@
 package main
 
 import (
+	"calypto/cfg"
+	"calypto/pkg/cache"
+	"calypto/pkg/db"
+	"calypto/pkg/logger"
+	"calypto/pkg/oauth2"
 	"context"
+	"database/sql"
 	"fmt"
-	"gosdk/cfg"
-	"gosdk/pkg/cache"
-	"gosdk/pkg/logger"
-	"gosdk/pkg/oauth2"
 	"log"
 	"time"
 
-	_ "gosdk/api" // swagger docs
+	_ "calypto/api" // swagger docs
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -59,6 +64,57 @@ func main() {
 				log.Printf("failed to shutdown OpenTelemetry: %v", err)
 			}
 		}()
+	}
+
+	// ============
+	// Build Postgres DSN from config
+	// ============
+	pg := config.Postgres
+	pgDSN := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		pg.User,
+		pg.Password,
+		pg.Host,
+		pg.Port,
+		pg.DBName,
+		pg.SSLMode,
+	)
+
+	// ============
+	// Init DB client
+	// ============
+	client, err := db.NewSQLClient("postgres", pgDSN)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// ============
+	// Example transaction
+	// ============
+	err = client.WithTransaction(context.Background(), sql.LevelSerializable,
+		func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, "INSERT INTO users(id, name) VALUES($1, $2)", 1, "Alice")
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+	if err != nil {
+		fmt.Println("Transaction failed:", err)
+	} else {
+		fmt.Println("Transaction committed successfully")
+	}
+
+	// =========
+	// Migrate
+	// =========
+	m, err := migrate.New("file://db/migrations", pgDSN)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Fatal(err)
 	}
 
 	// ============

@@ -1,10 +1,10 @@
 package oauth2
 
 import (
+	"calypto/cfg"
 	"context"
 	"errors"
 	"fmt"
-	"gosdk/cfg"
 	"time"
 )
 
